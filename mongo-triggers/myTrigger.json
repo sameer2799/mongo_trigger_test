@@ -1,0 +1,41 @@
+name: Deploy MongoDB Trigger
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Create or Update MongoDB Trigger
+        run: |
+          echo "Reading trigger definition..."
+          TRIGGER_JSON=$(cat mongo-triggers/myTrigger.json)
+
+          echo "Checking if trigger exists..."
+          RESPONSE=$(curl -s -u "${{ secrets.MONGODB_PUBLIC_KEY }}:${{ secrets.MONGODB_PRIVATE_KEY }}" \
+            "https://cloud.mongodb.com/api/atlas/v1.0/groups/${{ secrets.MONGODB_PROJECT_ID }}/triggers")
+
+          TRIGGER_ID=$(echo "$RESPONSE" | jq -r '.results[] | select(.name == "userInsertTrigger") | .id')
+
+          if [ -z "$TRIGGER_ID" ]; then
+            echo "Trigger does not exist. Creating..."
+            curl -s -X POST \
+              -u "${{ secrets.MONGODB_PUBLIC_KEY }}:${{ secrets.MONGODB_PRIVATE_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "$TRIGGER_JSON" \
+              "https://cloud.mongodb.com/api/atlas/v1.0/groups/${{ secrets.MONGODB_PROJECT_ID }}/triggers"
+          else
+            echo "Trigger exists. Updating..."
+            curl -s -X PATCH \
+              -u "${{ secrets.MONGODB_PUBLIC_KEY }}:${{ secrets.MONGODB_PRIVATE_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "$TRIGGER_JSON" \
+              "https://cloud.mongodb.com/api/atlas/v1.0/groups/${{ secrets.MONGODB_PROJECT_ID }}/triggers/$TRIGGER_ID"
+          fi
